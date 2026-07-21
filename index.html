@@ -47,15 +47,9 @@
           <p class="text-xs text-slate-500">自動化同步與當日內容預覽</p>
         </div>
       </div>
-      <div class="flex items-center space-x-2">
-        <button onclick="toggleRlsModal(true)" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-full text-xs font-medium transition shadow-sm">
-          <i class="fa-solid fa-shield-halved text-amber-600"></i>
-          <span>RLS 權限設定</span>
-        </button>
-        <div class="flex items-center space-x-2 bg-slate-100 px-3 py-1.5 rounded-full text-xs font-medium text-slate-600">
-          <i class="fa-regular fa-calendar text-blue-600"></i>
-          <span id="currentDateBadge">載入日期...</span>
-        </div>
+      <div class="flex items-center space-x-2 bg-slate-100 px-3 py-1.5 rounded-full text-xs font-medium text-slate-600">
+        <i class="fa-regular fa-calendar text-blue-600"></i>
+        <span id="currentDateBadge">載入日期...</span>
       </div>
     </div>
   </header>
@@ -69,7 +63,7 @@
           <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
             <i class="fa-solid fa-cloud-arrow-up text-blue-600"></i> 上傳每日檔案
           </h2>
-          <p class="text-xs text-slate-500 mt-0.5">可同時選擇最多 5 個檔案 (支援 .csv, .json, .txt)</p>
+          <p class="text-xs text-slate-500 mt-0.5">可同時選擇最多 6 個檔案 (支援 .csv, .json, .txt)</p>
         </div>
         <span class="inline-flex items-center text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-md">
           <i class="fa-solid fa-shield-halved mr-1.5"></i> 自動維護近 2 日備份
@@ -87,7 +81,7 @@
             </div>
             <div>
               <p class="text-sm font-medium text-slate-700">點擊選擇檔案，或將檔案拖曳至此處</p>
-              <p class="text-xs text-slate-400 mt-1">單次上限 5 個檔案</p>
+              <p class="text-xs text-slate-400 mt-1">單次上限 6 個檔案</p>
             </div>
           </div>
         </div>
@@ -100,11 +94,11 @@
 
         <!-- Action Buttons & Status -->
         <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 pt-2">
-          <div id="status" class="text-sm font-medium text-slate-600 flex items-center gap-2 min-h-[38px] w-full sm:w-auto">
+          <div id="status" class="text-sm font-medium text-slate-600 flex items-center gap-2 min-h-[38px]">
             <span class="text-slate-400 text-xs">等待檔案選擇...</span>
           </div>
           
-          <button id="uploadBtn" onclick="uploadFiles()" disabled class="inline-flex items-center justify-center px-5 py-2.5 bg-blue-600 text-white font-medium text-sm rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 shrink-0">
+          <button id="uploadBtn" onclick="uploadFiles()" disabled class="inline-flex items-center justify-center px-5 py-2.5 bg-blue-600 text-white font-medium text-sm rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
             <i class="fa-solid fa-paper-plane mr-2"></i> 上傳並更新
           </button>
         </div>
@@ -138,70 +132,6 @@
 
   <!-- Toast Notification Container -->
   <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
-
-  <!-- RLS Setup Guidance Modal -->
-  <div id="rlsModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
-    <div class="bg-white rounded-2xl shadow-xl max-w-2xl w-full overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
-      <div class="bg-slate-900 px-6 py-4 flex items-center justify-between text-white">
-        <div class="flex items-center space-x-2">
-          <i class="fa-solid fa-shield-halved text-amber-400 text-lg"></i>
-          <h3 class="font-semibold text-base">Supabase Storage RLS 權限修復指南</h3>
-        </div>
-        <button onclick="toggleRlsModal(false)" class="text-slate-400 hover:text-white transition">
-          <i class="fa-solid fa-xmark text-lg"></i>
-        </button>
-      </div>
-      <div class="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
-        <p class="text-sm text-slate-600 leading-relaxed">
-          若出現 <code class="text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded font-mono text-xs">row-level security policy</code> 錯誤，表示您的 Supabase 尚未開放 Storage Bucket 的寫入與讀取權限。請執行以下設定：
-        </p>
-        
-        <div class="space-y-2">
-          <div class="flex items-center justify-between">
-            <label class="text-xs font-semibold text-slate-700 uppercase tracking-wider">複製 SQL 語法至 Supabase SQL Editor 執行：</label>
-            <button onclick="copyRlsSql()" class="text-xs font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded transition flex items-center gap-1">
-              <i class="fa-regular fa-copy"></i> 複製 SQL 指令
-            </button>
-          </div>
-          <pre id="rlsSqlContent" class="bg-slate-900 text-emerald-400 p-4 rounded-xl text-xs font-mono overflow-x-auto leading-relaxed border border-slate-800">
--- 1. 確保 daily-files bucket 為公開 (Public)
-INSERT INTO storage.buckets (id, name, public)
-VALUES ('daily-files', 'daily-files', true)
-ON CONFLICT (id) DO UPDATE SET public = true;
-
--- 2. 允許所有人讀取、上傳、更新與刪除檔案
-CREATE POLICY "Public Select daily-files" ON storage.objects
-  FOR SELECT USING (bucket_id = 'daily-files');
-
-CREATE POLICY "Public Insert daily-files" ON storage.objects
-  FOR INSERT WITH CHECK (bucket_id = 'daily-files');
-
-CREATE POLICY "Public Update daily-files" ON storage.objects
-  FOR UPDATE USING (bucket_id = 'daily-files');
-
-CREATE POLICY "Public Delete daily-files" ON storage.objects
-  FOR DELETE USING (bucket_id = 'daily-files');</pre>
-        </div>
-
-        <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-800 space-y-1">
-          <p class="font-semibold flex items-center gap-1.5">
-            <i class="fa-solid fa-lightbulb text-amber-600"></i> 操作步驟：
-          </p>
-          <ol class="list-decimal list-inside space-y-1 pl-1 text-amber-700">
-            <li>登入您的 Supabase 控制台。</li>
-            <li>選擇專案後進入左側選單的 <strong>SQL Editor</strong>。</li>
-            <li>點擊 <strong>New Query</strong>，貼上上方 SQL 語法並點選 <strong>Run</strong> 執行。</li>
-            <li>回到此頁面重新上傳即可成功！</li>
-          </ol>
-        </div>
-      </div>
-      <div class="bg-slate-50 px-6 py-3 border-t border-slate-100 flex justify-end">
-        <button onclick="toggleRlsModal(false)" class="px-4 py-2 bg-slate-800 text-white text-xs font-medium rounded-lg hover:bg-slate-900 transition">
-          已了解關閉
-        </button>
-      </div>
-    </div>
-  </div>
 
   <script>
     // 1. 初始化 Supabase Client
@@ -270,8 +200,8 @@ CREATE POLICY "Public Delete daily-files" ON storage.objects
         return;
       }
 
-      if (files.length > 5) {
-        showToast('一次最多只能選擇 5 個檔案！', 'warning');
+      if (files.length > 6) {
+        showToast('一次最多只能選擇 6 個檔案！', 'warning');
         e.target.value = '';
         container.classList.add('hidden');
         btn.disabled = true;
@@ -334,8 +264,8 @@ CREATE POLICY "Public Delete daily-files" ON storage.objects
         return;
       }
 
-      if (files.length > 5) {
-        showToast('一次最多只能選擇 5 個檔案！', 'warning');
+      if (files.length > 6) {
+        showToast('一次最多只能選擇 6 個檔案！', 'warning');
         return;
       }
 
@@ -368,52 +298,10 @@ CREATE POLICY "Public Delete daily-files" ON storage.objects
 
       } catch (err) {
         console.error(err);
-        
-        // 判斷是否為 RLS 權限錯誤
-        if (err.message && (err.message.includes('row-level security') || err.message.includes('violates'))) {
-          statusDiv.innerHTML = `
-            <div class="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 w-full">
-              <div class="flex items-center gap-2">
-                <i class="fa-solid fa-shield-halved text-rose-500 text-base shrink-0"></i>
-                <span><strong>權限不足 (RLS 限制)：</strong>Supabase Storage 尚未允許寫入權限。</span>
-              </div>
-              <button onclick="toggleRlsModal(true)" class="px-2.5 py-1 bg-rose-600 text-white rounded font-medium hover:bg-rose-700 transition shrink-0">
-                查看修復 SQL
-              </button>
-            </div>
-          `;
-          showToast('上傳失敗：Storage RLS 權限不足', 'error');
-        } else {
-          statusDiv.innerHTML = `<span class="text-rose-600"><i class="fa-solid fa-circle-exclamation mr-1"></i> 操作失敗: ${escapeHtml(err.message)}</span>`;
-          showToast('上傳失敗: ' + err.message, 'error');
-        }
+        statusDiv.innerHTML = `<span class="text-rose-600"><i class="fa-solid fa-circle-exclamation mr-1"></i> 操作失敗: ${escapeHtml(err.message)}</span>`;
+        showToast('上傳失敗: ' + err.message, 'error');
         uploadBtn.disabled = false;
       }
-    }
-
-    // RLS Modal 開關控制
-    function toggleRlsModal(show) {
-      const modal = document.getElementById('rlsModal');
-      if (show) {
-        modal.classList.remove('hidden');
-      } else {
-        modal.classList.add('hidden');
-      }
-    }
-
-    function copyRlsSql() {
-      const sqlText = document.getElementById('rlsSqlContent').innerText;
-      const textarea = document.createElement('textarea');
-      textarea.value = sqlText;
-      document.body.appendChild(textarea);
-      textarea.select();
-      try {
-        document.execCommand('copy');
-        showToast('已複製 RLS 修復 SQL！', 'success');
-      } catch (e) {
-        showToast('複製失敗', 'error');
-      }
-      document.body.removeChild(textarea);
     }
 
     // 3. 載入並呈現最新資料
