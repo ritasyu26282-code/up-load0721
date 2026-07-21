@@ -1,39 +1,215 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="zh-TW" class="h-full bg-slate-50">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>每日檔案上傳與檢視系統</title>
-  <!-- 引入 Supabase JS SDK -->
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Google Font: Inter -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Supabase JS SDK -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
-    .upload-section { margin-bottom: 20px; padding: 15px; border: 1px solid #ccc; border-radius: 8px; }
-    .file-card { background: #f9f9f9; border: 1px solid #ddd; padding: 10px; margin-top: 10px; border-radius: 5px; }
-    pre { background: #eee; padding: 10px; overflow-x: auto; }
-  </style>
-</head>
-<body>
-
-  <h2>📂 每日檔案管理系統</h2>
-
-  <div class="upload-section">
-    <h3>上傳每日檔案（一次可選取 5 個）</h3>
-    <input type="file" id="fileInput" multiple accept=".csv, .json, .txt">
-    <button onclick="uploadFiles()">上傳並更新</button>
-    <div id="status"></div>
-  </div>
-
-  <hr>
-
-  <h3>📊 最新檔案內容 preview</h3>
-  <div id="fileViewer">讀取中...</div>
 
   <script>
-    // 1. 初始化 Supabase
-    const SUPABASE_URL = 'YOUR_SUPABASE_URL';
-    const SUPABASE_KEY = 'YOUR_SUPABASE_ANON_KEY';
-    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          },
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+    .drag-active { border-color: #2563eb !important; background-color: #eff6ff !important; }
+  </style>
+</head>
+<body class="min-h-full flex flex-col text-slate-800 antialiased selection:bg-blue-500 selection:text-white">
 
+  <!-- Top Navigation / Header -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="p-2 bg-blue-600 text-white rounded-lg shadow-sm">
+          <i class="fa-solid fa-folder-closed text-xl"></i>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold text-slate-900 leading-tight">每日檔案管理系統</h1>
+          <p class="text-xs text-slate-500">自動化同步與當日內容預覽</p>
+        </div>
+      </div>
+      <div class="flex items-center space-x-2">
+        <button onclick="toggleRlsModal(true)" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-full text-xs font-medium transition shadow-sm">
+          <i class="fa-solid fa-shield-halved text-amber-600"></i>
+          <span>RLS 權限設定</span>
+        </button>
+        <div class="flex items-center space-x-2 bg-slate-100 px-3 py-1.5 rounded-full text-xs font-medium text-slate-600">
+          <i class="fa-regular fa-calendar text-blue-600"></i>
+          <span id="currentDateBadge">載入日期...</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    
+    <!-- Upload Card -->
+    <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden transition-all duration-200">
+      <div class="p-5 sm:p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div>
+          <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+            <i class="fa-solid fa-cloud-arrow-up text-blue-600"></i> 上傳每日檔案
+          </h2>
+          <p class="text-xs text-slate-500 mt-0.5">可同時選擇最多 5 個檔案 (支援 .csv, .json, .txt)</p>
+        </div>
+        <span class="inline-flex items-center text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-md">
+          <i class="fa-solid fa-shield-halved mr-1.5"></i> 自動維護近 2 日備份
+        </span>
+      </div>
+
+      <div class="p-5 sm:p-6 space-y-4">
+        <!-- Drag & Drop Zone -->
+        <div id="dropZone" class="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center bg-slate-50 hover:bg-slate-100/80 hover:border-slate-400 transition cursor-pointer relative group">
+          <input type="file" id="fileInput" multiple accept=".csv, .json, .txt" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onchange="handleFileSelect(event)">
+          
+          <div class="flex flex-col items-center justify-center space-y-3 pointer-events-none">
+            <div class="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+              <i class="fa-solid fa-file-arrow-up text-xl"></i>
+            </div>
+            <div>
+              <p class="text-sm font-medium text-slate-700">點擊選擇檔案，或將檔案拖曳至此處</p>
+              <p class="text-xs text-slate-400 mt-1">單次上限 5 個檔案</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Selected Files List -->
+        <div id="selectedFilesContainer" class="hidden space-y-2">
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">已選擇的檔案：</p>
+          <ul id="selectedFilesList" class="divide-y divide-slate-100 border border-slate-200 rounded-lg bg-white overflow-hidden text-sm"></ul>
+        </div>
+
+        <!-- Action Buttons & Status -->
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 pt-2">
+          <div id="status" class="text-sm font-medium text-slate-600 flex items-center gap-2 min-h-[38px] w-full sm:w-auto">
+            <span class="text-slate-400 text-xs">等待檔案選擇...</span>
+          </div>
+          
+          <button id="uploadBtn" onclick="uploadFiles()" disabled class="inline-flex items-center justify-center px-5 py-2.5 bg-blue-600 text-white font-medium text-sm rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 shrink-0">
+            <i class="fa-solid fa-paper-plane mr-2"></i> 上傳並更新
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- File Viewer Section -->
+    <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div class="p-5 sm:p-6 border-b border-slate-100 flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <div class="p-1.5 bg-emerald-100 text-emerald-700 rounded-md">
+            <i class="fa-solid fa-chart-simple text-sm"></i>
+          </div>
+          <h2 class="text-base font-semibold text-slate-900">最新檔案內容預覽</h2>
+        </div>
+
+        <button onclick="loadLatestFiles()" class="text-xs font-medium text-slate-600 hover:text-blue-600 px-3 py-1.5 rounded-lg border border-slate-200 hover:border-blue-300 bg-white transition flex items-center gap-1.5 shadow-sm">
+          <i class="fa-solid fa-rotate text-slate-400"></i> 重新載入
+        </button>
+      </div>
+
+      <!-- File Content Container -->
+      <div id="fileViewer" class="p-5 sm:p-6 min-h-[200px]">
+        <div class="flex flex-col items-center justify-center py-12 text-slate-400">
+          <i class="fa-solid fa-spinner animate-spin text-2xl text-blue-500 mb-3"></i>
+          <p class="text-sm">正在讀取最新檔案...</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+  <!-- RLS Setup Guidance Modal -->
+  <div id="rlsModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl shadow-xl max-w-2xl w-full overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
+      <div class="bg-slate-900 px-6 py-4 flex items-center justify-between text-white">
+        <div class="flex items-center space-x-2">
+          <i class="fa-solid fa-shield-halved text-amber-400 text-lg"></i>
+          <h3 class="font-semibold text-base">Supabase Storage RLS 權限修復指南</h3>
+        </div>
+        <button onclick="toggleRlsModal(false)" class="text-slate-400 hover:text-white transition">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+      <div class="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+        <p class="text-sm text-slate-600 leading-relaxed">
+          若出現 <code class="text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded font-mono text-xs">row-level security policy</code> 錯誤，表示您的 Supabase 尚未開放 Storage Bucket 的寫入與讀取權限。請執行以下設定：
+        </p>
+        
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <label class="text-xs font-semibold text-slate-700 uppercase tracking-wider">複製 SQL 語法至 Supabase SQL Editor 執行：</label>
+            <button onclick="copyRlsSql()" class="text-xs font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded transition flex items-center gap-1">
+              <i class="fa-regular fa-copy"></i> 複製 SQL 指令
+            </button>
+          </div>
+          <pre id="rlsSqlContent" class="bg-slate-900 text-emerald-400 p-4 rounded-xl text-xs font-mono overflow-x-auto leading-relaxed border border-slate-800">
+-- 1. 確保 daily-files bucket 為公開 (Public)
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('daily-files', 'daily-files', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+-- 2. 允許所有人讀取、上傳、更新與刪除檔案
+CREATE POLICY "Public Select daily-files" ON storage.objects
+  FOR SELECT USING (bucket_id = 'daily-files');
+
+CREATE POLICY "Public Insert daily-files" ON storage.objects
+  FOR INSERT WITH CHECK (bucket_id = 'daily-files');
+
+CREATE POLICY "Public Update daily-files" ON storage.objects
+  FOR UPDATE USING (bucket_id = 'daily-files');
+
+CREATE POLICY "Public Delete daily-files" ON storage.objects
+  FOR DELETE USING (bucket_id = 'daily-files');</pre>
+        </div>
+
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-800 space-y-1">
+          <p class="font-semibold flex items-center gap-1.5">
+            <i class="fa-solid fa-lightbulb text-amber-600"></i> 操作步驟：
+          </p>
+          <ol class="list-decimal list-inside space-y-1 pl-1 text-amber-700">
+            <li>登入您的 Supabase 控制台。</li>
+            <li>選擇專案後進入左側選單的 <strong>SQL Editor</strong>。</li>
+            <li>點擊 <strong>New Query</strong>，貼上上方 SQL 語法並點選 <strong>Run</strong> 執行。</li>
+            <li>回到此頁面重新上傳即可成功！</li>
+          </ol>
+        </div>
+      </div>
+      <div class="bg-slate-50 px-6 py-3 border-t border-slate-100 flex justify-end">
+        <button onclick="toggleRlsModal(false)" class="px-4 py-2 bg-slate-800 text-white text-xs font-medium rounded-lg hover:bg-slate-900 transition">
+          已了解關閉
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 1. 初始化 Supabase Client
+    const SUPABASE_URL = 'https://oxuvvioaenzifebmuioi.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im94dXZ2aW9hZW56aWZlYm11aW9pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2MzE1NjYsImV4cCI6MjEwMDIwNzU2Nn0.SNk6UuvAMbxo0RvzxCfOLAfnn32jyZt0hFkoP0Lk7Vw';
+    
+    // 初始化 SDK
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     const BUCKET_NAME = 'daily-files';
 
     // 取得當天日期字串 YYYY-MM-DD
@@ -41,108 +217,356 @@
       return new Date().toISOString().split('T')[0];
     }
 
+    // 替代 alert 的通知系統
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      
+      const bgColors = {
+        success: 'bg-emerald-600 text-white',
+        error: 'bg-rose-600 text-white',
+        warning: 'bg-amber-500 text-white',
+        info: 'bg-slate-800 text-white'
+      };
+
+      const icons = {
+        success: 'fa-circle-check',
+        error: 'fa-circle-xmark',
+        warning: 'fa-triangle-exclamation',
+        info: 'fa-circle-info'
+      };
+
+      toast.className = `pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg text-sm font-medium transform transition-all duration-300 translate-y-2 opacity-0 ${bgColors[type] || bgColors.info}`;
+      toast.innerHTML = `
+        <i class="fa-solid ${icons[type] || icons.info} text-base"></i>
+        <span>${escapeHtml(message)}</span>
+      `;
+
+      container.appendChild(toast);
+
+      // Trigger animation
+      requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+      });
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 4000);
+    }
+
+    // 處理檔案選擇變更
+    function handleFileSelect(e) {
+      const files = e.target.files || e.dataTransfer?.files;
+      const container = document.getElementById('selectedFilesContainer');
+      const list = document.getElementById('selectedFilesList');
+      const btn = document.getElementById('uploadBtn');
+      const statusDiv = document.getElementById('status');
+
+      if (!files || files.length === 0) {
+        container.classList.add('hidden');
+        btn.disabled = true;
+        statusDiv.innerHTML = '<span class="text-slate-400 text-xs">等待檔案選擇...</span>';
+        return;
+      }
+
+      if (files.length > 5) {
+        showToast('一次最多只能選擇 5 個檔案！', 'warning');
+        e.target.value = '';
+        container.classList.add('hidden');
+        btn.disabled = true;
+        return;
+      }
+
+      list.innerHTML = '';
+      Array.from(files).forEach((file, index) => {
+        const li = document.createElement('li');
+        li.className = 'px-3 py-2 flex items-center justify-between bg-slate-50/50 hover:bg-slate-50 transition';
+        li.innerHTML = `
+          <div class="flex items-center space-x-2 truncate">
+            <i class="fa-regular fa-file-code text-blue-500"></i>
+            <span class="font-medium text-slate-700 truncate">${escapeHtml(file.name)}</span>
+          </div>
+          <span class="text-xs text-slate-400 font-mono">${(file.size / 1024).toFixed(1)} KB</span>
+        `;
+        list.appendChild(li);
+      });
+
+      container.classList.remove('hidden');
+      btn.disabled = false;
+      statusDiv.innerHTML = `<span class="text-blue-600 font-semibold"><i class="fa-solid fa-check mr-1"></i> 已選取 ${files.length} 個檔案</span>`;
+    }
+
+    // Drag and Drop 效果與監聽
+    const dropZone = document.getElementById('dropZone');
+    
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropZone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        dropZone.classList.add('drag-active');
+      }, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropZone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('drag-active');
+      }, false);
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+      const dt = e.dataTransfer;
+      const files = dt.files;
+      const fileInput = document.getElementById('fileInput');
+      fileInput.files = files;
+      handleFileSelect({ target: { files: files } });
+    });
+
     // 2. 上傳檔案邏輯
     async function uploadFiles() {
       const fileInput = document.getElementById('fileInput');
       const files = fileInput.files;
       const statusDiv = document.getElementById('status');
+      const uploadBtn = document.getElementById('uploadBtn');
 
-      if (files.length === 0) {
-        alert('請先選取檔案！');
+      if (!files || files.length === 0) {
+        showToast('請先選取檔案！', 'warning');
         return;
       }
 
-      statusDiv.innerText = '上傳中...';
+      if (files.length > 5) {
+        showToast('一次最多只能選擇 5 個檔案！', 'warning');
+        return;
+      }
+
+      uploadBtn.disabled = true;
+      statusDiv.innerHTML = '<span class="text-blue-600 animate-pulse"><i class="fa-solid fa-spinner animate-spin mr-1.5"></i> 檔案上傳中...</span>';
       const today = getTodayStr();
 
       try {
         for (let i = 0; i < files.length; i++) {
           const file = files[i];
-          // 檔名加上日期字首：2026-07-21_檔名.ext
           const filePath = `${today}/${file.name}`;
 
-          // upsert: true 確保當天重複上傳時會直接覆蓋最新檔
-          const { error } = await supabase.storage
+          const { error } = await supabaseClient.storage
             .from(BUCKET_NAME)
             .upload(filePath, file, { upsert: true });
 
           if (error) throw error;
         }
 
-        statusDiv.innerText = '✅ 上傳成功！正在更新顯示內容...';
+        statusDiv.innerHTML = '<span class="text-emerald-600"><i class="fa-solid fa-circle-check mr-1.5"></i> 上傳成功！正在清理舊檔與更新...</span>';
+        showToast('檔案上傳成功！', 'success');
         
-        // 觸發自動清理（刪除超過兩天以上的檔案）
         await cleanupOldFiles();
-
-        // 重新載入顯示內容
         await loadLatestFiles();
+        
+        // 重設表單
+        fileInput.value = '';
+        document.getElementById('selectedFilesContainer').classList.add('hidden');
+        statusDiv.innerHTML = '<span class="text-emerald-600"><i class="fa-solid fa-check mr-1"></i> 全部更新完成！</span>';
 
       } catch (err) {
         console.error(err);
-        statusDiv.innerText = '❌ 上傳失敗: ' + err.message;
+        
+        // 判斷是否為 RLS 權限錯誤
+        if (err.message && (err.message.includes('row-level security') || err.message.includes('violates'))) {
+          statusDiv.innerHTML = `
+            <div class="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 w-full">
+              <div class="flex items-center gap-2">
+                <i class="fa-solid fa-shield-halved text-rose-500 text-base shrink-0"></i>
+                <span><strong>權限不足 (RLS 限制)：</strong>Supabase Storage 尚未允許寫入權限。</span>
+              </div>
+              <button onclick="toggleRlsModal(true)" class="px-2.5 py-1 bg-rose-600 text-white rounded font-medium hover:bg-rose-700 transition shrink-0">
+                查看修復 SQL
+              </button>
+            </div>
+          `;
+          showToast('上傳失敗：Storage RLS 權限不足', 'error');
+        } else {
+          statusDiv.innerHTML = `<span class="text-rose-600"><i class="fa-solid fa-circle-exclamation mr-1"></i> 操作失敗: ${escapeHtml(err.message)}</span>`;
+          showToast('上傳失敗: ' + err.message, 'error');
+        }
+        uploadBtn.disabled = false;
       }
+    }
+
+    // RLS Modal 開關控制
+    function toggleRlsModal(show) {
+      const modal = document.getElementById('rlsModal');
+      if (show) {
+        modal.classList.remove('hidden');
+      } else {
+        modal.classList.add('hidden');
+      }
+    }
+
+    function copyRlsSql() {
+      const sqlText = document.getElementById('rlsSqlContent').innerText;
+      const textarea = document.createElement('textarea');
+      textarea.value = sqlText;
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand('copy');
+        showToast('已複製 RLS 修復 SQL！', 'success');
+      } catch (e) {
+        showToast('複製失敗', 'error');
+      }
+      document.body.removeChild(textarea);
     }
 
     // 3. 載入並呈現最新資料
     async function loadLatestFiles() {
       const viewer = document.getElementById('fileViewer');
-      viewer.innerHTML = '';
+      viewer.innerHTML = `
+        <div class="flex flex-col items-center justify-center py-10 text-slate-400">
+          <i class="fa-solid fa-spinner animate-spin text-2xl text-blue-500 mb-2"></i>
+          <p class="text-sm">載入最新檔案中...</p>
+        </div>
+      `;
 
-      // 取得 today 資料夾下的檔案
       const today = getTodayStr();
-      const { data: files, error } = await supabase.storage
-        .from(BUCKET_NAME)
-        .list(today);
-
-      if (error || !files || files.length === 0) {
-        viewer.innerText = '當天尚無上傳的檔案。';
-        return;
-      }
-
-      for (const file of files) {
-        // 下載/讀取檔案內容
-        const { data, error: downloadErr } = await supabase.storage
+      try {
+        const { data: files, error } = await supabaseClient.storage
           .from(BUCKET_NAME)
-          .download(`${today}/${file.name}`);
+          .list(today);
 
-        if (!downloadErr) {
-          const text = await data.text();
-          
-          // 建立呈現元件
-          const card = document.createElement('div');
-          card.className = 'file-card';
-          card.innerHTML = `<h4>📄 ${file.name}</h4><pre>${text.slice(0, 500)}...</pre>`; // 範例顯示前 500 字
-          viewer.appendChild(card);
+        if (error) throw error;
+
+        // 濾除資料夾標記
+        const validFiles = files ? files.filter(f => f.name !== '.emptyFolderPlaceholder') : [];
+
+        if (validFiles.length === 0) {
+          viewer.innerHTML = `
+            <div class="text-center py-12 px-4 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50">
+              <i class="fa-regular fa-folder-open text-4xl text-slate-300 mb-3"></i>
+              <p class="text-sm font-medium text-slate-600">當天尚無上傳的檔案</p>
+              <p class="text-xs text-slate-400 mt-1">您可以利用上方區塊選取並上傳今日檔案</p>
+            </div>
+          `;
+          return;
         }
-      }
-    }
 
-    // 4. 清理邏輯：僅保留近兩個工作日（可依需求微調算日期的邏輯）
-    async function cleanupOldFiles() {
-      // 取得所有日期資料夾並比較，刪除超過 2 天的資料夾或檔案
-      const { data: folders } = await supabase.storage.from(BUCKET_NAME).list();
-      if (!folders) return;
+        viewer.innerHTML = '';
+        const grid = document.createElement('div');
+        grid.className = 'grid grid-cols-1 gap-4';
 
-      // 按日期排序，留下最新的 2 個日期資料夾，其餘刪除
-      const sortedFolders = folders
-        .filter(f => f.name.match(/^\d{4}-\d{2}-\d{2}$/))
-        .sort((a, b) => b.name.localeCompare(a.name));
+        for (const file of validFiles) {
+          const { data, error: downloadErr } = await supabaseClient.storage
+            .from(BUCKET_NAME)
+            .download(`${today}/${file.name}`);
 
-      // 若資料夾超過 2 個，將舊的刪除
-      if (sortedFolders.length > 2) {
-        const toDeleteFolders = sortedFolders.slice(2);
-        for (const folder of toDeleteFolders) {
-          const { data: filesToDelete } = await supabase.storage.from(BUCKET_NAME).list(folder.name);
-          if (filesToDelete && filesToDelete.length > 0) {
-            const filePaths = filesToDelete.map(f => `${folder.name}/${f.name}`);
-            await supabase.storage.from(BUCKET_NAME).remove(filePaths);
+          if (!downloadErr && data) {
+            const text = await data.text();
+            
+            const card = document.createElement('div');
+            card.className = 'bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-sm hover:shadow transition-shadow';
+            
+            const fileSize = file.metadata?.size ? (file.metadata.size / 1024).toFixed(1) : (data.size / 1024).toFixed(1);
+
+            card.innerHTML = `
+              <div class="bg-white px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+                <div class="flex items-center space-x-2 truncate">
+                  <i class="fa-solid fa-file-code text-blue-600"></i>
+                  <h4 class="font-semibold text-sm text-slate-800 truncate">${escapeHtml(file.name)}</h4>
+                  <span class="text-xs text-slate-400 font-mono bg-slate-100 px-2 py-0.5 rounded">
+                    ${fileSize} KB
+                  </span>
+                </div>
+                <button onclick="copyToClipboard(this)" data-content="${escapeAttribute(text)}" class="text-xs text-slate-500 hover:text-blue-600 bg-slate-100 hover:bg-blue-50 px-2.5 py-1 rounded transition flex items-center gap-1">
+                  <i class="fa-regular fa-copy"></i> 複製內容
+                </button>
+              </div>
+              <div class="p-4 bg-slate-900 text-slate-100 overflow-x-auto text-xs font-mono leading-relaxed max-h-60">
+                <pre class="whitespace-pre-wrap">${escapeHtml(text.slice(0, 1000))}${text.length > 1000 ? '\n\n... [內容已截斷，僅顯示前 1000 字元]' : ''}</pre>
+              </div>
+            `;
+            grid.appendChild(card);
           }
         }
+        viewer.appendChild(grid);
+
+      } catch (err) {
+        console.error(err);
+        viewer.innerHTML = `
+          <div class="p-4 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-sm flex items-start gap-3">
+            <i class="fa-solid fa-triangle-exclamation text-base mt-0.5"></i>
+            <div>
+              <p class="font-semibold">讀取失敗</p>
+              <p class="text-xs text-rose-600 mt-1">${escapeHtml(err.message || '無法連線至 Supabase Storage 或 Bucket 尚未建立。')}</p>
+            </div>
+          </div>
+        `;
       }
     }
 
-    // 網頁開啟時自動載入最新上傳資料
-    window.onload = loadLatestFiles;
+    // 4. 自動清理：保留最近 2 個工作日/日期資料夾
+    async function cleanupOldFiles() {
+      try {
+        const { data: folders, error } = await supabaseClient.storage.from(BUCKET_NAME).list();
+        if (error || !folders) return;
+
+        const sortedFolders = folders
+          .filter(f => f.name.match(/^\d{4}-\d{2}-\d{2}$/))
+          .sort((a, b) => b.name.localeCompare(a.name));
+
+        // 保留最新的 2 個資料夾，其餘清空並刪除
+        if (sortedFolders.length > 2) {
+          const toDeleteFolders = sortedFolders.slice(2);
+          for (const folder of toDeleteFolders) {
+            const { data: filesToDelete } = await supabaseClient.storage.from(BUCKET_NAME).list(folder.name);
+            if (filesToDelete && filesToDelete.length > 0) {
+              const filePaths = filesToDelete.map(f => `${folder.name}/${f.name}`);
+              await supabaseClient.storage.from(BUCKET_NAME).remove(filePaths);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('清理舊檔案時發生異常:', err);
+      }
+    }
+
+    // 簡易 HTML 轉義
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function escapeAttribute(str) {
+      if (!str) return '';
+      return String(str).replace(/"/g, '&quot;');
+    }
+
+    // 複製到剪貼簿功能
+    function copyToClipboard(btn) {
+      const text = btn.getAttribute('data-content');
+      if (!text) return;
+
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand('copy');
+        showToast('已成功複製到剪貼簿！', 'success');
+      } catch (err) {
+        showToast('複製失敗', 'error');
+      }
+      document.body.removeChild(textarea);
+    }
+
+    // 網頁開啟時初始化日期與載入檔案
+    window.onload = function() {
+      const today = getTodayStr();
+      document.getElementById('currentDateBadge').innerText = today;
+      loadLatestFiles();
+    };
   </script>
 </body>
 </html>
