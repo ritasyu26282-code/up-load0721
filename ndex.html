@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>每日檔案上傳與檢視系統</title>
+  <!-- 引入 Supabase JS SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+    .upload-section { margin-bottom: 20px; padding: 15px; border: 1px solid #ccc; border-radius: 8px; }
+    .file-card { background: #f9f9f9; border: 1px solid #ddd; padding: 10px; margin-top: 10px; border-radius: 5px; }
+    pre { background: #eee; padding: 10px; overflow-x: auto; }
+  </style>
+</head>
+<body>
+
+  <h2>📂 每日檔案管理系統</h2>
+
+  <div class="upload-section">
+    <h3>上傳每日檔案（一次可選取 5 個）</h3>
+    <input type="file" id="fileInput" multiple accept=".csv, .json, .txt">
+    <button onclick="uploadFiles()">上傳並更新</button>
+    <div id="status"></div>
+  </div>
+
+  <hr>
+
+  <h3>📊 最新檔案內容 preview</h3>
+  <div id="fileViewer">讀取中...</div>
+
+  <script>
+    // 1. 初始化 Supabase
+    const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+    const SUPABASE_KEY = 'YOUR_SUPABASE_ANON_KEY';
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const BUCKET_NAME = 'daily-files';
+
+    // 取得當天日期字串 YYYY-MM-DD
+    function getTodayStr() {
+      return new Date().toISOString().split('T')[0];
+    }
+
+    // 2. 上傳檔案邏輯
+    async function uploadFiles() {
+      const fileInput = document.getElementById('fileInput');
+      const files = fileInput.files;
+      const statusDiv = document.getElementById('status');
+
+      if (files.length === 0) {
+        alert('請先選取檔案！');
+        return;
+      }
+
+      statusDiv.innerText = '上傳中...';
+      const today = getTodayStr();
+
+      try {
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          // 檔名加上日期字首：2026-07-21_檔名.ext
+          const filePath = `${today}/${file.name}`;
+
+          // upsert: true 確保當天重複上傳時會直接覆蓋最新檔
+          const { error } = await supabase.storage
+            .from(BUCKET_NAME)
+            .upload(filePath, file, { upsert: true });
+
+          if (error) throw error;
+        }
+
+        statusDiv.innerText = '✅ 上傳成功！正在更新顯示內容...';
+        
+        // 觸發自動清理（刪除超過兩天以上的檔案）
+        await cleanupOldFiles();
+
+        // 重新載入顯示內容
+        await loadLatestFiles();
+
+      } catch (err) {
+        console.error(err);
+        statusDiv.innerText = '❌ 上傳失敗: ' + err.message;
+      }
+    }
+
+    // 3. 載入並呈現最新資料
+    async function loadLatestFiles() {
+      const viewer = document.getElementById('fileViewer');
+      viewer.innerHTML = '';
+
+      // 取得 today 資料夾下的檔案
+      const today = getTodayStr();
+      const { data: files, error } = await supabase.storage
+        .from(BUCKET_NAME)
+        .list(today);
+
+      if (error || !files || files.length === 0) {
+        viewer.innerText = '當天尚無上傳的檔案。';
+        return;
+      }
+
+      for (const file of files) {
+        // 下載/讀取檔案內容
+        const { data, error: downloadErr } = await supabase.storage
+          .from(BUCKET_NAME)
+          .download(`${today}/${file.name}`);
+
+        if (!downloadErr) {
+          const text = await data.text();
+          
+          // 建立呈現元件
+          const card = document.createElement('div');
+          card.className = 'file-card';
+          card.innerHTML = `<h4>📄 ${file.name}</h4><pre>${text.slice(0, 500)}...</pre>`; // 範例顯示前 500 字
+          viewer.appendChild(card);
+        }
+      }
+    }
+
+    // 4. 清理邏輯：僅保留近兩個工作日（可依需求微調算日期的邏輯）
+    async function cleanupOldFiles() {
+      // 取得所有日期資料夾並比較，刪除超過 2 天的資料夾或檔案
+      const { data: folders } = await supabase.storage.from(BUCKET_NAME).list();
+      if (!folders) return;
+
+      // 按日期排序，留下最新的 2 個日期資料夾，其餘刪除
+      const sortedFolders = folders
+        .filter(f => f.name.match(/^\d{4}-\d{2}-\d{2}$/))
+        .sort((a, b) => b.name.localeCompare(a.name));
+
+      // 若資料夾超過 2 個，將舊的刪除
+      if (sortedFolders.length > 2) {
+        const toDeleteFolders = sortedFolders.slice(2);
+        for (const folder of toDeleteFolders) {
+          const { data: filesToDelete } = await supabase.storage.from(BUCKET_NAME).list(folder.name);
+          if (filesToDelete && filesToDelete.length > 0) {
+            const filePaths = filesToDelete.map(f => `${folder.name}/${f.name}`);
+            await supabase.storage.from(BUCKET_NAME).remove(filePaths);
+          }
+        }
+      }
+    }
+
+    // 網頁開啟時自動載入最新上傳資料
+    window.onload = loadLatestFiles;
+  </script>
+</body>
+</html>
